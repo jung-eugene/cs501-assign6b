@@ -2,26 +2,48 @@
 
 ## Explanation
 
-The **Compass & Digital Level** app simulates a real compass and tilt meter using animated UI elements.
-It demonstrates two key instrument tools:
+The **Compass & Digital Level** app uses actual device sensors to act like a real navigation instrument. It combines data from three sensors:
+* **Magnetometer + Accelerometer** → calculates the compass heading in degrees.
+* **Gyroscope** → tracks roll and pitch to show a live digital level.
 
-* **Compass**: Uses a rotating needle based on heading values (simulated from 0°-360°).
-* **Digital Level**: Displays device tilt using roll and pitch values (simulated).
-
-Although the assignment mentions magnetometer, accelerometer, and gyroscope, this version uses **simulated sliders** so the app works fully on the emulator. The UI is built with **Jetpack Compose**, using `Canvas`, rotation, and bright theme colors to produce a fun instrument look.
+The compass needle rotates smoothly using Compose animations, and the digital level updates in real time as the device is tilted. When running on the emulator, values can be controlled using **Extended Controls → Virtual Sensors**.
 
 ## How to Use
 
-1. Launch the app. Both the **compass** and **digital level** appear centered on screen.
-2. Drag the **Compass Heading** slider to rotate the compass needle.
-3. Use the **Roll** and **Pitch** sliders to simulate tilt and update the digital level readouts.
-4. The compass arrow moves smoothly thanks to animated rotation.
-5. The entire UI updates instantly as the simulated sensor values change.
+### **Using an Emulator**
+
+Android Studio includes a Virtual Sensor panel that lets you simulate real device movement.
+
+1. Run the app on an Android Emulator.
+2. Open **Extended Controls** → **Virtual Sensors**
+3. Use the rotation sliders:
+   * **Z-Rot** → rotates compass heading (turn left/right)
+   * **X-Rot** → tilts forward/backward (pitch)
+   * **Y-Rot** → tilts left/right (roll)
+4. Watch the UI update instantly:
+   * The **compass needle rotates** as Z-Rot changes.
+   * **Roll and pitch numbers change** as X- and Y-Rot change.
+
+### **Using a Physical Device**
+
+1. Install the app on a real phone with magnetometer, accelerometer, and gyroscope.
+2. Rotate the phone:
+   * Turning left/right changes compass heading.
+   * Tilting the phone adjusts roll and pitch values.
+3. The compass needle and digital level update automatically.
 
 ## Implementation
 
-* **State Management**: `remember` state variables store simulated heading, roll, and pitch.
-* **Compass Needle**: Drawn using a `Canvas` and rotated using `animateFloatAsState` for smooth animation.
-* **Digital Level**: Simple text-based display for roll and pitch degrees.
-* **Simulation Controls**: Three sliders allow real-time testing and UI updates without physical sensors.
-* **Composable Layout**: The entire screen is arranged with `Column` and centered using `Arrangement.SpaceEvenly`.
+* **SensorManager** registers listeners for:
+  * `TYPE_ACCELEROMETER`
+  * `TYPE_MAGNETIC_FIELD`
+  * `TYPE_GYROSCOPE`
+* **Compass Heading** is calculated using:
+  * `getRotationMatrix()`
+  * `getOrientation()`
+  * Converted from radians → degrees and normalized to 0°–360°.
+* **Digital Level** integrates gyroscope rotation values to produce roll and pitch updates.
+* **UI** uses:
+  * A **Canvas** to draw the compass needle
+  * `animateFloatAsState()` for smooth rotation
+  * Centered layout with simple dark theme styling.
