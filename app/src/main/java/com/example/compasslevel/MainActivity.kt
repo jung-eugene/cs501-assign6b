@@ -1,5 +1,7 @@
 package com.example.compasslevel
 
+import android.content.Context
+import android.hardware.*
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,30 +14,97 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
+import kotlin.math.*
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), SensorEventListener {
+
+    private lateinit var sensorManager: SensorManager
+
+    // Raw sensor arrays
+    private val accelData = FloatArray(3)
+    private val magnetData = FloatArray(3)
+
+    // Exposed to Compose via mutable states
+    private val _azimuth = mutableStateOf(0f)
+    private val _roll = mutableStateOf(0f)
+    private val _pitch = mutableStateOf(0f)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { CompassLevelApp() }
+
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+
+        // Register accelerometer, magnetometer, gyroscope
+        sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+        sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.also {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+        sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)?.also {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+
+        setContent {
+            CompassLevelApp(
+                azimuth = _azimuth.value,
+                roll = _roll.value,
+                pitch = _pitch.value
+            )
+        }
     }
+
+    override fun onSensorChanged(event: SensorEvent) {
+        when (event.sensor.type) {
+
+            Sensor.TYPE_ACCELEROMETER -> {
+                System.arraycopy(event.values, 0, accelData, 0, event.values.size)
+                calculateOrientation()
+            }
+
+            Sensor.TYPE_MAGNETIC_FIELD -> {
+                System.arraycopy(event.values, 0, magnetData, 0, event.values.size)
+                calculateOrientation()
+            }
+
+            Sensor.TYPE_GYROSCOPE -> {
+                // Gyroscope gives rotation speed — integrate small shifts
+                _roll.value += event.values[1] * 2      // small multiplier for visibility
+                _pitch.value += event.values[0] * 2
+            }
+        }
+    }
+
+    private fun calculateOrientation() {
+        val rotationMatrix = FloatArray(9)
+        val orientationVals = FloatArray(3)
+
+        val success = SensorManager.getRotationMatrix(
+            rotationMatrix,
+            null,
+            accelData,
+            magnetData
+        )
+
+        if (success) {
+            SensorManager.getOrientation(rotationMatrix, orientationVals)
+            val azimuthRadians = orientationVals[0]
+            val azimuthDegrees = ((Math.toDegrees(azimuthRadians.toDouble()) + 360) % 360).toFloat()
+            _azimuth.value = azimuthDegrees
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 }
 
 @Composable
-fun CompassLevelApp() {
-    // Simulated values (instead of real sensors)
-    var heading by remember { mutableStateOf(0f) }   // Compass heading
-    var roll by remember { mutableStateOf(0f) }      // Gyroscope roll
-    var pitch by remember { mutableStateOf(0f) }     // Gyroscope pitch
+fun CompassLevelApp(azimuth: Float, roll: Float, pitch: Float) {
 
-    // Rotation animation for fun
-    val animatedHeading = animateFloatAsState(targetValue = heading).value
+    val animatedHeading = animateFloatAsState(targetValue = azimuth).value
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -49,77 +118,49 @@ fun CompassLevelApp() {
             verticalArrangement = Arrangement.SpaceEvenly
         ) {
 
-            Text("Compass & Digital Level",
+            Text(
+                "Compass & Digital Level",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
 
-            /* ------------------- Compass Section ------------------- */
+            /* ---------------- Compass ---------------- */
             Box(
                 modifier = Modifier
-                    .size(220.dp)
+                    .size(230.dp)
                     .background(Color(0xFF1E2A38), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(modifier = Modifier.size(200.dp)) {
                     rotate(animatedHeading) {
-                        // Compass arrow
                         drawLine(
                             color = Color.Red,
                             start = center,
                             end = center.copy(y = center.y - 80),
-                            strokeWidth = 8f
+                            strokeWidth = 10f
                         )
                         drawLine(
                             color = Color.White,
                             start = center,
                             end = center.copy(y = center.y + 80),
-                            strokeWidth = 6f
+                            strokeWidth = 8f
                         )
                     }
                 }
-                Text("${animatedHeading.roundToInt()}°",
+                Text(
+                    "${animatedHeading.roundToInt()}°",
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            /* ----------------- Digital Level Section ---------------- */
+            /* ---------------- Digital Level ---------------- */
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Digital Level", color = Color.White, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 Text("Roll:  ${roll.roundToInt()}°", color = Color.White)
                 Text("Pitch: ${pitch.roundToInt()}°", color = Color.White)
-            }
-
-            /* ------------------ Simulation Controls ------------------ */
-            Column(
-                Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-
-                Text("Simulate Compass Heading", color = Color.White)
-                Slider(
-                    value = heading,
-                    onValueChange = { heading = it },
-                    valueRange = 0f..360f
-                )
-
-                Spacer(Modifier.height(24.dp))
-                Text("Simulate Tilt (Gyroscope)", color = Color.White)
-                Text("Roll")
-                Slider(
-                    value = roll,
-                    onValueChange = { roll = it },
-                    valueRange = -45f..45f
-                )
-                Text("Pitch")
-                Slider(
-                    value = pitch,
-                    onValueChange = { pitch = it },
-                    valueRange = -45f..45f
-                )
             }
         }
     }
